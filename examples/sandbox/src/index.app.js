@@ -1,53 +1,19 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import styled from "styled-components";
 
 import {
   ReactQueryConfigProvider,
   useQuery,
   useMutation,
-  refetchAllQueries,
-  useIsFetching,
-  queries,
-  globalStateListeners
+  queryCache
 } from "react-query";
 
+import {
+  ReactQueryDevtools,
+  ReactQueryDevtoolsPanel
+} from "react-query-devtools";
+
 import "./styles.css";
-
-const QueryStateList = styled.div`
-  display: flex;
-  padding: 0.15rem;
-  flex-wrap: wrap;
-`;
-
-const QueryState = styled.div`
-  margin: 0.3rem;
-  color: white;
-  padding: 0.3rem;
-  font-size: 12px;
-  border-radius: 0.3rem;
-  font-weight: bold;
-  text-shadow: 0 0 10px black;
-
-  background: ${props =>
-    props.isFetching
-      ? "orange"
-      : props.isInactive
-      ? "grey"
-      : props.isStale
-      ? "red"
-      : "green"};
-`;
-
-const QueryKeys = styled.div`
-  font-size: 0.7rem;
-`;
-
-const QueryKey = styled.span`
-  width: 20px;
-  height: 20px;
-  display: inline-block;
-`;
 
 let id = 0;
 let list = [
@@ -62,86 +28,6 @@ let list = [
 let errorRate = 0.05;
 let queryTimeMin = 1000;
 let queryTimeMax = 2000;
-
-const fetchTodos = ({ filter } = {}) => {
-  console.log("fetchTodos", { filter });
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < errorRate) {
-        return reject(
-          new Error(JSON.stringify({ fetchTodos: { filter } }, null, 2))
-        );
-      }
-      resolve(list.filter(d => d.name.includes(filter)));
-    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
-  });
-};
-
-const fetchTodoById = ({ id }) => {
-  console.log("fetchTodoById", { id });
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < errorRate) {
-        return reject(
-          new Error(JSON.stringify({ fetchTodoById: { id } }, null, 2))
-        );
-      }
-      resolve(list.find(d => d.id === id));
-    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
-  });
-};
-
-const postTodo = ({ name, notes }) => {
-  console.log("postTodo", { name, notes });
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < errorRate) {
-        return reject(
-          new Error(JSON.stringify({ postTodo: { name, notes } }, null, 2))
-        );
-      }
-      const todo = { name, notes, id: id++ };
-      list = [...list, todo];
-      resolve(todo);
-    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
-  });
-};
-
-const patchTodo = todo => {
-  console.log("patchTodo", todo);
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < errorRate) {
-        return reject(new Error(JSON.stringify({ patchTodo: todo }, null, 2)));
-      }
-      list = list.map(d => {
-        if (d.id === todo.id) {
-          return todo;
-        }
-        return d;
-      });
-      resolve(todo);
-    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
-  });
-};
-
-export function useQueries() {
-  const [state, setState] = React.useState({ queries });
-
-  React.useEffect(() => {
-    const fn = () => {
-      setState({ queries });
-    };
-
-    globalStateListeners.push(fn);
-
-    return () => {
-      globalStateListeners.splice(globalStateListeners.indexOf(fn), 1);
-    };
-  }, []);
-
-  return state.queries;
-}
 
 function Root() {
   const [staleTime, setStaleTime] = React.useState(1000);
@@ -234,6 +120,9 @@ function Root() {
       </div>
       <br />
       <App />
+      <br />
+      <ReactQueryDevtoolsPanel />
+      <ReactQueryDevtools />
     </ReactQueryConfigProvider>
   );
 }
@@ -243,57 +132,10 @@ function App() {
   const [views, setViews] = React.useState(["", "fruit", "grape"]);
   // const [views, setViews] = React.useState([""]);
 
-  const queries = _useQueries();
-
   return (
     <div className="App">
-      Queries - <small>Click a query to log to console)</small>
-      <QueryStateList>
-        {queries.map(query => {
-          const {
-            queryHash,
-            state: { isFetching, isStale, isInactive }
-          } = query;
-
-          return (
-            <QueryState
-              key={queryHash}
-              isFetching={isFetching}
-              isStale={isStale}
-              isInactive={isInactive}
-              onClick={() => {
-                console.info(query);
-              }}
-            >
-              {queryHash}
-            </QueryState>
-          );
-        })}
-      </QueryStateList>
-      <QueryKeys>
-        <span>
-          <QueryKey style={{ background: "green" }} /> Cached{" "}
-        </span>
-        <span>
-          <QueryKey style={{ background: "orange" }} /> Fetching{" "}
-        </span>
-        <span>
-          <QueryKey style={{ background: "red" }} /> Stale{" "}
-        </span>
-        <span>
-          <QueryKey style={{ background: "gray" }} /> Inactive
-        </span>
-      </QueryKeys>
-      <br />
-      <RefreshingBanner />
       <div>
-        <button
-          onClick={async () => {
-            try {
-              refetchAllQueries({ force: true });
-            } catch {}
-          }}
-        >
+        <button onClick={() => queryCache.refetchQueries(true)}>
           Force Refetch All
         </button>
       </div>
@@ -333,28 +175,13 @@ function App() {
   );
 }
 
-function RefreshingBanner() {
-  const isFetching = useIsFetching();
-  return (
-    <div>
-      Global <code>isFetching</code>: {isFetching.toString()}
-      <br />
-      <br />
-    </div>
-  );
-}
-
 function Todos({ initialFilter = "", setEditingIndex }) {
   const [filter, setFilter] = React.useState(initialFilter);
 
-  const {
-    data,
-    isLoading,
-    isFetching,
-    error,
-    failureCount,
-    refetch
-  } = useQuery(["todos", { filter }], fetchTodos);
+  const { status, data, isFetching, error, failureCount, refetch } = useQuery(
+    ["todos", { filter }],
+    fetchTodos
+  );
 
   return (
     <div>
@@ -364,11 +191,12 @@ function Todos({ initialFilter = "", setEditingIndex }) {
           <input value={filter} onChange={e => setFilter(e.target.value)} />
         </label>
       </div>
-      {isLoading ? (
+      {status === "loading" ? (
         <span>Loading... (Attempt: {failureCount + 1})</span>
-      ) : error ? (
+      ) : status === "error" ? (
         <span>
-          Error!{" "}
+          Error: {error.message}
+          <br />
           <button onClick={() => refetch({ disableThrow: true })}>Retry</button>
         </span>
       ) : (
@@ -402,45 +230,33 @@ function Todos({ initialFilter = "", setEditingIndex }) {
 
 function EditTodo({ editingIndex, setEditingIndex }) {
   // Don't attempt to query until editingIndex is truthy
-  const {
-    data,
-    isLoading,
-    isFetching,
-    error,
-    failureCount,
-    refetch
-  } = useQuery(
+  const { status, data, isFetching, error, failureCount, refetch } = useQuery(
     editingIndex !== null && ["todo", { id: editingIndex }],
     fetchTodoById
   );
 
-  const [todo, setTodo] = React.useState(data);
+  const [todo, setTodo] = React.useState(data || {});
 
   React.useEffect(() => {
     if (editingIndex !== null && data) {
-      console.log(data);
       setTodo(data);
     } else {
-      setTodo();
+      setTodo({});
     }
   }, [data, editingIndex]);
 
   const [mutate, mutationState] = useMutation(patchTodo, {
-    refetchQueries: ["todos"]
+    onSuccess: data => {
+      // Update `todos` and the individual todo queries when this mutation succeeds
+      queryCache.refetchQueries("todos");
+      queryCache.setQueryData(["todo", { id: editingIndex }], data);
+    }
   });
 
-  const onSave = () => {
-    try {
-      mutate(todo, {
-        // Update `todos` and the individual todo queries when this mutation succeeds
-        updateQuery: ["todo", { id: editingIndex }]
-      });
-    } catch {
-      // Errors are shown in the UI
-    }
-  };
+  const onSave = () => mutate(todo);
 
-  const canEditOrSave = isLoading || mutationState.isLoading;
+  const disableEditSave =
+    status === "loading" || mutationState.status === "loading";
 
   return (
     <div>
@@ -453,14 +269,14 @@ function EditTodo({ editingIndex, setEditingIndex }) {
           </>
         ) : null}
       </div>
-      {isLoading ? (
+      {status === "loading" ? (
         <span>Loading... (Attempt: {failureCount + 1})</span>
       ) : error ? (
         <span>
           Error!{" "}
           <button onClick={() => refetch({ disableThrow: true })}>Retry</button>
         </span>
-      ) : todo ? (
+      ) : (
         <>
           <label>
             Name:{" "}
@@ -470,7 +286,7 @@ function EditTodo({ editingIndex, setEditingIndex }) {
                 e.persist() ||
                 setTodo(old => ({ ...old, name: e.target.value }))
               }
-              disabled={canEditOrSave}
+              disabled={disableEditSave}
             />
           </label>
           <label>
@@ -481,22 +297,20 @@ function EditTodo({ editingIndex, setEditingIndex }) {
                 e.persist() ||
                 setTodo(old => ({ ...old, notes: e.target.value }))
               }
-              disabled={canEditOrSave}
+              disabled={disableEditSave}
             />
           </label>
           <div>
-            <button onClick={onSave} disabled={canEditOrSave}>
+            <button onClick={onSave} disabled={disableEditSave}>
               Save
             </button>
           </div>
           <div>
-            {mutationState.isLoading
+            {mutationState.status === "loading"
               ? "Saving..."
-              : mutationState.error
-              ? String(mutationState.error)
-              : mutationState.data
-              ? "Saved!"
-              : null}
+              : mutationState.status === "error"
+              ? mutationState.error.message
+              : "Saved!"}
           </div>
           <div>
             {isFetching ? (
@@ -508,7 +322,7 @@ function EditTodo({ editingIndex, setEditingIndex }) {
             )}
           </div>
         </>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -516,8 +330,10 @@ function EditTodo({ editingIndex, setEditingIndex }) {
 function AddTodo() {
   const [name, setName] = React.useState("");
 
-  const [mutate, { isLoading, error, data }] = useMutation(postTodo, {
-    refetchQueries: ["todos"]
+  const [mutate, { status, error }] = useMutation(postTodo, {
+    onSuccess: () => {
+      queryCache.refetchQueries("todos");
+    }
   });
 
   return (
@@ -525,22 +341,89 @@ function AddTodo() {
       <input
         value={name}
         onChange={e => setName(e.target.value)}
-        disabled={isLoading}
+        disabled={status === "loading"}
       />
-      <button onClick={() => mutate({ name })} disabled={isLoading || !name}>
+      <button
+        onClick={() => mutate({ name })}
+        disabled={status === "loading" || !name}
+      >
         Add Todo
       </button>
       <div>
-        {isLoading
+        {status === "loading"
           ? "Saving..."
-          : error
-          ? String(error)
-          : data
-          ? "Saved!"
-          : null}
+          : status === "error"
+          ? error.message
+          : "Saved!"}
       </div>
     </div>
   );
+}
+
+function fetchTodos(key, { filter } = {}) {
+  console.info("fetchTodos", { filter });
+  const promise = new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (Math.random() < errorRate) {
+        return reject(
+          new Error(JSON.stringify({ fetchTodos: { filter } }, null, 2))
+        );
+      }
+      resolve(list.filter(d => d.name.includes(filter)));
+    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
+  });
+
+  promise.cancel = () => console.info("cancelled", filter);
+
+  return promise;
+}
+
+function fetchTodoById(key, { id }) {
+  console.info("fetchTodoById", { id });
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (Math.random() < errorRate) {
+        return reject(
+          new Error(JSON.stringify({ fetchTodoById: { id } }, null, 2))
+        );
+      }
+      resolve(list.find(d => d.id == id));
+    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
+  });
+}
+
+function postTodo({ name, notes }) {
+  console.info("postTodo", { name, notes });
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (Math.random() < errorRate) {
+        return reject(
+          new Error(JSON.stringify({ postTodo: { name, notes } }, null, 2))
+        );
+      }
+      const todo = { name, notes, id: id++ };
+      list = [...list, todo];
+      resolve(todo);
+    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
+  });
+}
+
+function patchTodo(todo) {
+  console.info("patchTodo", todo);
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (Math.random() < errorRate) {
+        return reject(new Error(JSON.stringify({ patchTodo: todo }, null, 2)));
+      }
+      list = list.map(d => {
+        if (d.id === todo.id) {
+          return todo;
+        }
+        return d;
+      });
+      resolve(todo);
+    }, queryTimeMin + Math.random() * (queryTimeMax - queryTimeMin));
+  });
 }
 
 const rootElement = document.getElementById("root");

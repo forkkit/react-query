@@ -7,16 +7,20 @@ import { useQuery } from 'react-query'
 export default () => {
   const id =
     typeof window !== 'undefined' ? window.location.pathname.slice(1) : ''
-  const { data, isLoading, isFetching } = useQuery(['repository', { id }], () =>
-    fetch('/api/data?id=' + id)
+
+  const { status, data, error, isFetching } = useQuery(
+    ['team', id],
+    (key, id) => fetch('/api/data?id=' + id)
   )
 
   return (
     <div style={{ textAlign: 'center' }}>
       <h1>{id}</h1>
-      {isLoading ? (
+      {status === 'loading' ? (
         'Loading...'
-      ) : data ? (
+      ) : status === 'error' ? (
+        <span>Error: {error.message}</span>
+      ) : (
         <>
           <div>
             <p>forks: {data.forks_count}</p>
@@ -25,7 +29,7 @@ export default () => {
           </div>
           <div>{isFetching ? 'Background Updating...' : ' '}</div>
         </>
-      ) : null}
+      )}
       <br />
       <br />
       <Link href="/">
